@@ -1,101 +1,71 @@
-// src/pages/Dashboard.js
-
 import React, { useState, useEffect } from 'react';
 import { 
-  Container, 
-  Grid, 
-  Card, 
-  CardContent, 
-  Typography, 
-  Button, 
-  CircularProgress 
+  Container, Grid, Card, CardContent, Typography, 
+  Button, CircularProgress 
 } from '@mui/material';
 import { Line } from 'react-chartjs-2';
+import { fetchUsers } from '../services/api';
+
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
+  CategoryScale, LinearScale, PointElement,
+  LineElement, Title, Tooltip, Legend,
 } from 'chart.js';
 
-// Register the necessary Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 export default function Dashboard() {
-  // State to store the chart data and a loading indicator
   const [chartData, setChartData] = useState(null);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // A function that simulates fetching chart data (here with a 2-second delay).
-  // It generates new random data for the chart.
   const fetchChartData = () => {
     setLoading(true);
     setTimeout(() => {
-      const newData = {
+      setChartData({
         labels: ['2023-06-01', '2023-07-01', '2023-08-01', '2023-09-01'],
-        datasets: [
-          {
-            label: 'User Activity',
-            data: [
-              Math.floor(Math.random() * 1000) + 500,
-              Math.floor(Math.random() * 1000) + 500,
-              Math.floor(Math.random() * 1000) + 500,
-              Math.floor(Math.random() * 1000) + 500,
-            ],
-            borderColor: 'rgba(75,192,192,1)',
-            backgroundColor: 'rgba(75,192,192,0.2)',
-            tension: 0.4,
-          },
-        ],
-      };
-      setChartData(newData);
+        datasets: [{
+          label: 'User Activity',
+          data: Array(4).fill().map(() => Math.floor(Math.random() * 1000) + 500),
+          borderColor: 'rgba(75,192,192,1)',
+          backgroundColor: 'rgba(75,192,192,0.2)',
+          tension: 0.4,
+        }],
+      });
       setLoading(false);
     }, 2000);
   };
 
-  // Fetch the initial chart data when the component mounts
+  const fetchUserData = async () => {
+    try {
+      const data = await fetchUsers();
+      setUsers(data);
+    } catch (err) {
+      setError("Failed to fetch users: " + err.message);
+    }
+  };
+
   useEffect(() => {
     fetchChartData();
+    fetchUserData();
   }, []);
-
-  // Configure chart options
-  const options = {
-    responsive: true,
-    plugins: {
-      legend: { position: 'top' },
-      title: { display: true, text: 'User Activity Trends' },
-    },
-  };
 
   return (
     <Container sx={{ mt: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Dashboard Overview
-      </Typography>
-     
+      <Typography variant="h4" gutterBottom>Dashboard Overview</Typography>
+
       <Grid container spacing={3}>
-        {/* Metric Card: Total Users */}
         <Grid item xs={12} sm={6} md={4}>
           <Card sx={{ bgcolor: '#1E88E5', color: 'white', boxShadow: 3 }}>
             <CardContent>
               <Typography variant="h6">Total Users</Typography>
-              <Typography variant="h4">1,245</Typography>
+              <Typography variant="h4">{users.length}</Typography>
             </CardContent>
           </Card>
         </Grid>
-        {/* Metric Card: Active Sessions */}
+
         <Grid item xs={12} sm={6} md={4}>
           <Card sx={{ bgcolor: '#43A047', color: 'white', boxShadow: 3 }}>
             <CardContent>
@@ -104,7 +74,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
-        {/* Metric Card: Pending Approvals */}
+
         <Grid item xs={12} sm={6} md={4}>
           <Card sx={{ bgcolor: '#F4511E', color: 'white', boxShadow: 3 }}>
             <CardContent>
@@ -113,28 +83,46 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Grid>
-        {/* Chart Section */}
+
         <Grid item xs={12}>
           <Card sx={{ boxShadow: 3, p: 2 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                User Activity Trends
-              </Typography>
-              {/* If loading or chartData is not yet set, show a spinner.
-                  Otherwise, render the Line chart. */}
+              <Typography variant="h6" gutterBottom>User Activity Trends</Typography>
               {loading || !chartData ? (
                 <CircularProgress />
               ) : (
-                <Line data={chartData} options={options} />
+                <Line data={chartData} options={{
+                  responsive: true,
+                  plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: 'User Activity Trends' },
+                  },
+                }} />
               )}
-              {/* Button to refresh chart data */}
-              <Button 
-                variant="contained" 
-                sx={{ mt: 2 }} 
-                onClick={fetchChartData}
-              >
+              <Button variant="contained" sx={{ mt: 2 }} onClick={fetchChartData}>
                 Refresh Data
               </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Card sx={{ boxShadow: 3, p: 2 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Registered Users</Typography>
+              {error ? (
+                <Typography color="error">{error}</Typography>
+              ) : users.length ? (
+                <ul>
+                  {users.map((user) => (
+                    <li key={user.id}>
+                      {user.name} ({user.email})
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Typography>No users found.</Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>

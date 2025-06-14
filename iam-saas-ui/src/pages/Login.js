@@ -1,22 +1,35 @@
 import React, { useState } from 'react';
-import { Container, Card, CardContent, Typography, TextField, Button, Box } from '@mui/material';
+import {
+  Container, Card, CardContent, Typography, TextField, Button, Box
+} from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
 
 export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (username === 'user' && password === 'pass') {
-      login({ username: 'user' });
+    setError('');
+
+    try {
+      const response = await axios.post('http://localhost:3001/login', {
+        email,
+        password,
+      });
+
+      const { token } = response.data;
+      localStorage.setItem('token', token);
+      login({ email }); // update global auth state
       navigate('/dashboard', { replace: true });
-    } else {
-      setError('Invalid username or password');
+    } catch (err) {
+      console.error('Login failed:', err);
+      setError('Invalid email or password');
     }
   };
 
@@ -33,8 +46,23 @@ export default function Login() {
             </Typography>
           )}
           <Box component="form" onSubmit={handleLogin} noValidate sx={{ mt: 2 }}>
-            <TextField label="Username" fullWidth margin="normal" value={username} onChange={(e) => setUsername(e.target.value)} required />
-            <TextField label="Password" type="password" fullWidth margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <TextField
+              label="Email"
+              fullWidth
+              margin="normal"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <TextField
+              label="Password"
+              type="password"
+              fullWidth
+              margin="normal"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
             <Button type="submit" variant="contained" fullWidth sx={{ mt: 2 }}>
               Login
             </Button>

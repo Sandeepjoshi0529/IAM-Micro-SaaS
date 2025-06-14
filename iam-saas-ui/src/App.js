@@ -1,4 +1,3 @@
-// src/App.js
 import React, { Suspense, useState, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -11,6 +10,7 @@ import { NotificationProvider } from './context/NotificationContext';
 // Component imports
 import ErrorBoundary from './components/ErrorBoundary';
 import ProtectedRoute from './components/ProtectedRoute';
+import PublicRoute from './components/PublicRoute'; // ✅ NEW
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import AutoLogout from './components/AutoLogout';
@@ -26,16 +26,13 @@ const Settings = React.lazy(() => import('./pages/Settings'));
 const TwoFactorAuth = React.lazy(() => import('./pages/TwoFactorAuth'));
 
 function App() {
-  // State to manage dark/light mode
   const [darkMode, setDarkMode] = useState(false);
-  // Create a theme based on the darkMode state
   const theme = useMemo(
     () => createTheme({ palette: { mode: darkMode ? 'dark' : 'light' } }),
     [darkMode]
   );
 
   return (
-    // Highest-level ThemeProvider: ensures that everywhere in the app the theme is available.
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
@@ -45,14 +42,14 @@ function App() {
             <Sidebar />
             <Navbar darkMode={darkMode} setDarkMode={setDarkMode} />
             <ErrorBoundary>
-              <Suspense 
-                fallback={<div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading...</div>}
-              >
+              <Suspense fallback={<div style={{ textAlign: 'center', marginTop: '2rem' }}>Loading...</div>}>
                 <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/forgot-password" element={<ForgotPassword />} />
-                  {/* Wrap Dashboard inside an additional ThemeProvider to ensure it receives the theme context */}
+                  {/* ✅ Public pages use PublicRoute to block access for already-logged-in users */}
+                  <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+                  <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+                  <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+
+                  {/* ✅ Auth-protected pages */}
                   <Route
                     path="/dashboard"
                     element={
@@ -67,6 +64,8 @@ function App() {
                   <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
                   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                   <Route path="/two-factor-auth" element={<ProtectedRoute><TwoFactorAuth /></ProtectedRoute>} />
+                  
+                  {/* Fallback route */}
                   <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
               </Suspense>
