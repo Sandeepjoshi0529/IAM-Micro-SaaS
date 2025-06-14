@@ -2,7 +2,7 @@
 require("dotenv").config();
 
 const express = require("express");
-const cors = require('cors');
+const cors = require("cors");
 const { Pool } = require("pg");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
@@ -12,6 +12,14 @@ const port = process.env.PORT || 3001;
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Enable CORS
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    credentials: true, // if you plan to use cookies
+  })
+);
 
 // PostgreSQL connection pool
 const pool = new Pool({
@@ -24,11 +32,10 @@ pool.query("SELECT current_database() AS db", (err, result) => {
   else console.log("Connected to DB:", result.rows[0].db);
 });
 
-// JWT middleware
+// JWT verification middleware
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(403).json({ error: "Access denied" });
-
   const token = authHeader.split(" ")[1];
   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
     if (err) return res.status(401).json({ error: "Invalid token" });
@@ -37,37 +44,63 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-// Register route
+// ----------------------
+// Register Route
+// ----------------------
 app.post("/register", async (req, res) => {
-  const { name, email, password } = req.body;
-  const existing = await pool.query("SELECT * FROM public.app_users WHERE email = $1", [email]);
-  if (existing.rows.length) return res.status(409).json({ error: "Email already registered" });
-
-  const hashed = await bcrypt.hash(password, 10);
+  const { email, password } = req.body;
+  
+  // Validate input
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required." });
+  }
+  
   try {
-    const result = await pool.query(
-      "INSERT INTO public.app_users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email",
-      [name, email, hashed]
+    // Check if the user already exists by querying the app_users table
+    const userQuery = await pool.query(
+      "SELECT * FROM public.app_users WHERE email = $1",
+      [email]
     );
-    res.json({ message: "User registered", user: result.rows[0] });
-  } catch (err) {
-    console.error("Register error:", err);
-    res.status(500).json({ error: "Database error" });
+    if (userQuery.rows.length > 0) {
+      return res.status(400).json({ message: "Email is already in use." });
+    }
+    
+    // Hash the password using bcrypt
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    // Insert the new user into the database and return the created user
+    const insertQuery = await pool.query(
+      "INSERT INTO public.app_users (email, password) VALUES ($1, $2) RETURNING *",
+      [email, hashedPassword]
+    );
+    
+    return res
+      .status(201)
+      .json({ message: "User registered successfully.", user: insertQuery.rows[0] });
+  } catch (error) {
+    console.error("Registration error:", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 });
 
-// Login route
+// ----------------------
+// Login Route
+// ----------------------
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
+    // Retrieve the user from the database
     const result = await pool.query("SELECT * FROM public.app_users WHERE email = $1", [email]);
     if (!result.rows.length) return res.status(401).json({ error: "Invalid credentials" });
-
+    
     const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: "Invalid credentials" });
-
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+    
+    // Create JWT token
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    
     res.json({ message: "Login successful", token });
   } catch (err) {
     console.error("Login error:", err);
@@ -75,7 +108,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// GET all users (protected)
+// ----------------------
+// Protected Routes (require valid token)
+// ----------------------
+
+// Get all users
 app.get("/users", verifyToken, async (req, res) => {
   try {
     const result = await pool.query("SELECT id, name, email FROM public.app_users");
@@ -86,7 +123,7 @@ app.get("/users", verifyToken, async (req, res) => {
   }
 });
 
-// Create a user (protected)
+// Create a user (example; adjust fields as needed)
 app.post("/users", verifyToken, async (req, res) => {
   const { name, email } = req.body;
   try {
@@ -101,7 +138,7 @@ app.post("/users", verifyToken, async (req, res) => {
   }
 });
 
-// Update a user by ID (protected)
+// Update a user by ID
 app.put("/users/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const { name, email } = req.body;
@@ -118,7 +155,7 @@ app.put("/users/:id", verifyToken, async (req, res) => {
   }
 });
 
-// Delete a user by ID (protected)
+// Delete a user by ID
 app.delete("/users/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
@@ -134,18 +171,21 @@ app.delete("/users/:id", verifyToken, async (req, res) => {
   }
 });
 
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true, // if you plan to use cookies
-}));
-
-
-// ✅ NEW: Verify token route
+// Verify token route (protected route to confirm token validity)
 app.get("/verify-token", verifyToken, (req, res) => {
   res.status(200).json({ valid: true });
 });
 
-// Simple root route
+// ----------------------
+// Public Routes
+// ----------------------
+
+// Health check route to verify the server is running
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
+
+// Root route: returns current database time
 app.get("/", async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
@@ -155,7 +195,9 @@ app.get("/", async (req, res) => {
   }
 });
 
-// Server start
+// ----------------------
+// Start the Server
+// ----------------------
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
